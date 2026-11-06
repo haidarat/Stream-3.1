@@ -1,0 +1,2115 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0f">
+  <title>Custom RPC</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --glass: rgba(255, 255, 255, 0.04);
+      --glass-hover: rgba(255, 255, 255, 0.07);
+      --glass-border: rgba(255, 255, 255, 0.12);
+      --glass-shine: rgba(255, 255, 255, 0.18);
+      --text: rgba(255, 255, 255, 0.92);
+      --muted: rgba(255, 255, 255, 0.45);
+      --ok: #34d399;
+      --warn: #fbbf24;
+      --accent: #818cf8;
+      --accent2: #c084fc;
+      --blur: 24px;
+      --radius: 20px;
+      --radius-sm: 14px;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100dvh;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--text);
+      background: linear-gradient(135deg, #06060b 0%, #0b0b14 45%, #10101a 100%);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Animated liquid background ── */
+    .bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      background: radial-gradient(ellipse at 50% -10%, rgba(95, 105, 255, 0.16) 0%, rgba(10, 10, 15, 0) 58%);
+    }
+
+    .bg::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 72px 72px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,0.75), transparent 90%);
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(90px);
+      opacity: 0.22;
+      animation: float 20s ease-in-out infinite;
+    }
+
+    .blob-1 {
+      width: min(520px, 90vw);
+      height: min(520px, 90vw);
+      background: #4f46e5;
+      top: -16%;
+      left: -10%;
+      animation-delay: 0s;
+    }
+
+    .blob-2 {
+      width: min(420px, 75vw);
+      height: min(420px, 75vw);
+      background: #7c3aed;
+      bottom: -12%;
+      right: -8%;
+      animation-delay: -8s;
+    }
+
+    .blob-3 {
+      width: min(300px, 60vw);
+      height: min(300px, 60vw);
+      background: #2563eb;
+      top: 48%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      animation-delay: -14s;
+      opacity: 0.16;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33%       { transform: translate(18px, -14px) scale(1.03); }
+      66%       { transform: translate(-12px, 12px) scale(0.97); }
+    }
+
+    .bg-noise {
+      position: absolute;
+      inset: 0;
+      opacity: 0.025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      pointer-events: none;
+    }
+
+    .snow-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      opacity: 0.5;
+    }
+
+    .snow-flake {
+      position: absolute;
+      top: -10vh;
+      width: 2px;
+      height: 2px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 0 6px rgba(255, 255, 255, 0.45);
+      animation: snowFall linear infinite;
+    }
+
+    @keyframes snowFall {
+      0% { transform: translate3d(0, -10vh, 0) rotate(0deg); opacity: 0; }
+      10% { opacity: 0.8; }
+      100% { transform: translate3d(var(--drift, 0px), 110vh, 0) rotate(360deg); opacity: 0.9; }
+    }
+
+    /* ── Layout ── */
+    .wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: calc(20px + var(--safe-top)) 16px calc(28px + var(--safe-bottom));
+    }
+
+    @media (min-width: 768px) {
+      .wrap { padding: calc(32px + var(--safe-top)) 24px calc(40px + var(--safe-bottom)); }
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    @media (min-width: 640px) {
+      .header {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 24px;
+      }
+    }
+
+    .header-left h1 {
+      font-size: clamp(1.4rem, 4vw, 1.75rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 30%, rgba(255,255,255,0.55));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header-left p {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* ── Tabs Navigation ── */
+    .nav-tabs {
+      display: inline-flex;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      border-radius: 999px;
+      padding: 4px;
+      gap: 4px;
+      backdrop-filter: blur(12px);
+    }
+
+    .btn-discord {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #5865F2;
+      color: #fff;
+      text-decoration: none;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 7px 14px;
+      border-radius: 999px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 14px rgba(88, 101, 242, 0.35);
+    }
+    .btn-discord:hover {
+      background: #4752C4;
+      transform: translateY(-1px);
+    }
+
+    .user-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--glass-border);
+      padding: 4px 12px 4px 5px;
+      border-radius: 999px;
+    }
+    .avatar-sm {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .user-name {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .btn-logout {
+      font-size: 0.72rem;
+      color: #f87171;
+      text-decoration: none;
+      margin-left: 4px;
+      padding-left: 6px;
+      border-left: 1px solid rgba(255,255,255,0.1);
+    }
+    .btn-logout:hover {
+      text-decoration: underline;
+    }
+
+    .tab-btn {
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+    }
+
+    .tab-btn.active {
+      background: rgba(255, 255, 255, 0.14);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--muted);
+      animation: glowPulse 4.4s ease-in-out infinite;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .status-pill .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--ok);
+      box-shadow: 0 0 12px rgba(52, 211, 153, 0.6);
+      animation: pulse 2.5s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    .status-pill.off .dot {
+      background: var(--warn);
+      box-shadow: 0 0 12px rgba(251, 191, 36, 0.5);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.5; transform: scale(0.85); }
+    }
+
+    @keyframes glowPulse {
+      0%, 100% { box-shadow: 0 0 0 rgba(129, 140, 248, 0), inset 0 1px 0 var(--glass-shine); }
+      50%      { box-shadow: 0 0 12px rgba(129, 140, 248, 0.12), inset 0 1px 0 var(--glass-shine); }
+    }
+
+    /* ── Glass panel ── */
+    .glass {
+      background: var(--glass);
+      backdrop-filter: blur(var(--blur));
+      -webkit-backdrop-filter: blur(var(--blur));
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      box-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.28),
+        inset 0 1px 0 var(--glass-shine);
+      overflow: hidden;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    }
+
+    .glass-head {
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .glass-head h2 {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .tag {
+      font-size: 0.65rem;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .glass-body { padding: 16px 18px; }
+
+    @media (min-width: 768px) {
+      .glass-head { padding: 16px 22px; }
+      .glass-body { padding: 20px 22px; }
+    }
+
+    /* ── Grid ── */
+    .grid-main {
+      display: grid;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    @media (min-width: 768px) {
+      .grid-main {
+        grid-template-columns: 1fr 1.1fr 1fr;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+    }
+
+    .grid-bottom {
+      display: grid;
+      gap: 14px;
+    }
+
+    @media (min-width: 768px) {
+      .grid-bottom {
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+    }
+
+    /* ── Data rows ── */
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .row:last-child { border-bottom: none; padding-bottom: 0; }
+    .row:first-child { padding-top: 0; }
+
+    .row .label {
+      font-size: 0.82rem;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .row .value {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-align: right;
+      word-break: break-word;
+    }
+
+    .value.ok   { color: var(--ok); }
+    .value.warn { color: var(--warn); }
+    .value.accent { color: #a5b4fc; }
+
+    /* ── Health ring ── */
+    .health-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 0 4px;
+    }
+
+    .ring-container {
+      position: relative;
+      width: clamp(140px, 40vw, 168px);
+      height: clamp(140px, 40vw, 168px);
+    }
+
+    .ring-container svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+
+    .ring-bg {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.08);
+      stroke-width: 9;
+      stroke-linecap: round;
+    }
+
+    .ring-fill {
+      fill: none;
+      stroke: url(#ringGrad);
+      stroke-width: 10;
+      stroke-linecap: round;
+      stroke-dasharray: 326.7;
+      stroke-dashoffset: 326.7;
+      transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      paint-order: stroke;
+    }
+
+    .ring-center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .ring-center .pct {
+      font-size: clamp(1.5rem, 5vw, 1.85rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, #fff, #a5b4fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .ring-center .lbl {
+      font-size: 0.68rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-top: 2px;
+    }
+
+    /* ── Progress bar ── */
+    .bar-wrap { width: 100%; margin-top: 16px; }
+
+    .bar-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .bar-track {
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #7c8cff 0%, #a78bfa 100%);
+      box-shadow: 0 0 10px rgba(129, 140, 248, 0.28);
+      transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+      width: 0%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bar-fill::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+      transform: translateX(-100%);
+      animation: shimmer 2.2s linear infinite;
+    }
+
+    @keyframes shimmer {
+      100% { transform: translateX(100%); }
+    }
+
+    .segments {
+      display: flex;
+      gap: 4px;
+      margin-top: 12px;
+    }
+
+    .seg {
+      flex: 1;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .seg.on {
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      box-shadow: 0 0 6px rgba(129, 140, 248, 0.4);
+    }
+
+    /* ── Discord Profile Presence Widget ── */
+    .discord-card {
+      background: #1e1f22;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    .discord-header {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #dbdee1;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .discord-body {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .discord-avatar-wrap {
+      position: relative;
+      width: 74px;
+      height: 74px;
+      flex-shrink: 0;
+    }
+
+    .discord-large-img {
+      width: 100%;
+      height: 100%;
+      border-radius: 10px;
+      object-fit: cover;
+      background: #2b2d31;
+    }
+
+    .discord-small-img {
+      position: absolute;
+      bottom: -4px;
+      right: -4px;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 3px solid #1e1f22;
+      object-fit: cover;
+      background: #2b2d31;
+    }
+
+    .discord-info {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .discord-details {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #f2f3f5;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .discord-state {
+      font-size: 0.85rem;
+      color: #b5bac1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .discord-extra {
+      font-size: 0.82rem;
+      color: #949ba4;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .discord-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .discord-btn {
+      display: block;
+      width: 100%;
+      padding: 9px 12px;
+      background: #313338;
+      color: #f2f3f5;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .discord-btn:hover {
+      background: #383a40;
+      color: #fff;
+    }
+
+    .discord-btn:active {
+      transform: scale(0.98);
+    }
+
+    /* ── Presence card ── */
+    .presence-title {
+      font-size: clamp(0.95rem, 3vw, 1.1rem);
+      font-weight: 600;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      word-break: break-word;
+    }
+
+    .presence-sub {
+      font-size: 0.88rem;
+      color: var(--muted);
+      margin-bottom: 14px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+
+    /* ── Editor Form Styles ── */
+    .editor-section {
+      margin-top: 16px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    @media (min-width: 640px) {
+      .form-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group.full {
+      grid-column: 1 / -1;
+    }
+
+    .form-group label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .form-control:focus {
+      border-color: var(--accent);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
+    }
+
+    select.form-control {
+      cursor: pointer;
+    }
+
+    select.form-control option {
+      background: #11111a;
+      color: #fff;
+    }
+
+    .checkbox-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      cursor: pointer;
+    }
+
+    .checkbox-wrap input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .checkbox-wrap span {
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 13px 20px;
+      margin-top: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s;
+      box-shadow: inset 0 1px 0 var(--glass-shine);
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .btn:hover {
+      background: linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06));
+      border-color: rgba(255, 255, 255, 0.18);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18), inset 0 1px 0 var(--glass-shine);
+    }
+
+    .btn:active { transform: scale(0.98); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      border-color: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.35);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #4338ca, #6d28d9);
+      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.45);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.15);
+      color: #cbd5e1;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.14);
+      color: #fff;
+    }
+
+    .btn-image-host {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: #c7d2fe;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(129, 140, 248, 0.3);
+      border-radius: 8px;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .btn-image-host:hover {
+      background: rgba(99, 102, 241, 0.3);
+      color: #fff;
+      border-color: rgba(129, 140, 248, 0.6);
+      transform: translateY(-1px);
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #fff;
+    }
+
+    .btn-danger:hover {
+      background: linear-gradient(135deg, #b91c1c, #991b1b);
+    }
+
+    .hint-tag {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(129, 140, 248, 0.15);
+      color: #a5b4fc;
+      border: 1px solid rgba(129, 140, 248, 0.25);
+      margin-left: 6px;
+      letter-spacing: 0.03em;
+      vertical-align: middle;
+    }
+
+    .hint-tag.url {
+      background: rgba(56, 189, 248, 0.15);
+      color: #7dd3fc;
+      border-color: rgba(56, 189, 248, 0.25);
+    }
+
+    .hint-tag.media {
+      background: rgba(244, 114, 182, 0.15);
+      color: #f472b6;
+      border-color: rgba(244, 114, 182, 0.25);
+    }
+
+    .alert {
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .alert.success {
+      display: block;
+      background: rgba(52, 211, 153, 0.15);
+      border: 1px solid rgba(52, 211, 153, 0.3);
+      color: #a7f3d0;
+    }
+
+    .alert.error {
+      display: block;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+    }
+
+    /* ── Login Modal Overlay (บังคับล็อกอินก่อนเข้าถึงหน้าเว็บ) ── */
+    .login-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 10, 18, 0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      transition: opacity 0.3s ease;
+    }
+
+    .login-card {
+      background: rgba(22, 23, 34, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      max-width: 440px;
+      width: 100%;
+      padding: 36px 30px;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 40px rgba(88, 101, 242, 0.2);
+      animation: popIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(0.92); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    .login-card-icon {
+      width: 68px;
+      height: 68px;
+      background: linear-gradient(135deg, rgba(88, 101, 242, 0.2), rgba(124, 58, 237, 0.25));
+      border: 1px solid rgba(88, 101, 242, 0.4);
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #5865F2;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 24px rgba(88, 101, 242, 0.3);
+    }
+
+    .login-card h2 {
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 10px;
+      letter-spacing: -0.02em;
+    }
+
+    .login-card p {
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-bottom: 28px;
+    }
+
+    .btn-login-large {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      padding: 13px 20px;
+      background: #5865F2;
+      color: #fff;
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-radius: 12px;
+      transition: all 0.2s ease;
+      box-shadow: 0 6px 20px rgba(88, 101, 242, 0.45);
+    }
+
+    .btn-login-large:hover {
+      background: #4752C4;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 26px rgba(88, 101, 242, 0.55);
+    }
+
+    .login-security-tag {
+      margin-top: 20px;
+      font-size: 0.74rem;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+  <!-- Modal บังคับ Login ก่อนเข้าถึงหน้า Dashboard -->
+  <div id="loginGateOverlay" class="login-modal-overlay" style="display: none;">
+    <div class="login-card">
+      <div class="login-card-icon">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+        </svg>
+      </div>
+      <h2>เข้าสู่ระบบเพื่อใช้งาน</h2>
+      <p>ระบบนี้ต้องการการยืนยันตัวตนผ่าน Discord เพื่อเข้าถึงข้อมูลและการตั้งค่าสถานะ Rich Presence</p>
+      <a href="/api/auth/discord/login" class="btn-login-large">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+        <span>Login with Discord</span>
+      </a>
+      <div class="login-security-tag">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>ปลอดภัยด้วย Discord OAuth2 & 30-Day Session</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal ยืนยันการรีเซ็ตกลับเป็นค่าเริ่มต้น (Reset Confirmation Popup) -->
+  <div id="resetConfirmModal" class="login-modal-overlay" style="display: none;">
+    <div class="login-card" style="max-width: 440px;">
+      <div class="login-card-icon" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border-color: rgba(239, 68, 68, 0.3);">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+          <path d="M3 3v5h5"/>
+        </svg>
+      </div>
+      <h2>ยืนยันการล้างเป็นค่าเริ่มต้น?</h2>
+      <p style="color:#94a3b8; font-size:0.86rem; line-height:1.5; margin:10px 0 22px;">
+        คุณต้องการรีเซ็ตการตั้งค่า Custom RPC ทั้งหมดกลับเป็นค่าเริ่มต้นตามที่ระบบกำหนดไว้ใช่หรือไม่?
+      </p>
+      <div style="display:flex; gap:12px; width:100%;">
+        <button type="button" class="btn btn-secondary" onclick="closeResetModal()" style="flex:1; margin-top:0;">ยกเลิก</button>
+        <button type="button" class="btn btn-danger" onclick="executeResetDefaults()" id="btnConfirmReset" style="flex:1; margin-top:0;">ยืนยันรีเซ็ต</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+    <div class="bg-noise"></div>
+    <div class="snow-layer" id="snowLayer"></div>
+  </div>
+
+  <div class="wrap">
+    <header class="header">
+      <div class="header-left">
+        <h1>Custom RPC</h1>
+        <p id="subTitle">Status Monitor & Live Control</p>
+      </div>
+
+      <div class="header-actions">
+        <nav class="nav-tabs">
+          <button class="tab-btn active" id="tabMonitorBtn" onclick="switchTab('monitor')">Monitor</button>
+          <button class="tab-btn" id="tabEditorBtn" onclick="switchTab('editor')">RPC Settings</button>
+        </nav>
+
+        <div id="authProfile" class="user-badge" style="display: none;">
+          <img id="userAvatar" class="avatar-sm" src="" alt="Avatar">
+          <span id="userName" class="user-name"></span>
+          <a href="/api/auth/logout" class="btn-logout" title="ออกจากระบบ">Logout</a>
+        </div>
+        <a id="btnLoginDiscord" href="/api/auth/discord/login" class="btn-discord" style="display: none;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+          Login with Discord
+        </a>
+
+        <div class="status-pill" id="liveIndicator">
+          <span class="dot"></span>
+          <span id="liveText">Connecting</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- SECTION 1: STATUS MONITOR -->
+    <main id="sectionMonitor">
+      <div class="grid-main">
+        <div class="glass">
+          <div class="glass-head">
+            <h2>System</h2>
+            <span class="tag">Status</span>
+          </div>
+          <div class="glass-body">
+            <div class="row">
+              <span class="label">Discord</span>
+              <span class="value" id="discordStatus">—</span>
+            </div>
+            <div class="row">
+              <span class="label">Gateway</span>
+              <span class="value accent" id="gatewayStage">—</span>
+            </div>
+            <div class="row">
+              <span class="label">Rich Presence</span>
+              <span class="value" id="rpcStatus">—</span>
+            </div>
+            <div class="row">
+              <span class="label">Service</span>
+              <span class="value ok">Operational</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass">
+          <div class="glass-head">
+            <h2>Health</h2>
+            <span class="tag">Live</span>
+          </div>
+          <div class="glass-body">
+            <div class="health-wrap">
+              <div class="ring-container">
+                <svg viewBox="0 0 120 120">
+                  <defs>
+                    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#818cf8"/>
+                      <stop offset="100%" stop-color="#c084fc"/>
+                    </linearGradient>
+                  </defs>
+                  <circle class="ring-bg" cx="60" cy="60" r="52"/>
+                  <circle class="ring-fill" id="healthRing" cx="60" cy="60" r="52"/>
+                </svg>
+                <div class="ring-center">
+                  <div class="pct" id="healthPct">—</div>
+                  <div class="lbl">Health</div>
+                </div>
+              </div>
+            </div>
+            <div class="bar-wrap">
+              <div class="bar-top">
+                <span>Health</span>
+                <span id="memLabel">—</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" id="memBar"></div>
+              </div>
+              <div class="bar-top" style="margin-top: 10px;">
+                <span>RAM Usage</span>
+                <span id="ramLabel">—</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" id="ramBar"></div>
+              </div>
+              <div class="bar-top" style="margin-top: 10px;">
+                <span id="cpuName">CPU</span>
+                <span id="cpuLabel">—</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" id="cpuBar"></div>
+              </div>
+              <div class="segments" id="uptimeSegs"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass">
+          <div class="glass-head">
+            <h2>Runtime</h2>
+            <span class="tag">Metrics</span>
+          </div>
+          <div class="glass-body">
+            <div class="row">
+              <span class="label">Uptime</span>
+              <span class="value accent" id="uptime">—</span>
+            </div>
+            <div class="row">
+              <span class="label">Load</span>
+              <span class="value" id="sysLoad">—</span>
+            </div>
+            <div class="row">
+              <span class="label">Status</span>
+              <span class="value" id="sysStatus">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-bottom">
+        <div class="glass">
+          <div class="glass-head">
+            <h2>Presence Preview</h2>
+            <span class="tag" id="activityType">STREAMING</span>
+          </div>
+          <div class="glass-body">
+            <div class="discord-card">
+              <div class="discord-header" id="discordHeader">
+                <span id="discordActivityTitle">กำลังถ่ายทอดสด YouTube</span>
+              </div>
+              <div class="discord-body">
+                <div class="discord-avatar-wrap">
+                  <img id="discordLargeImg" class="discord-large-img" src="" alt="Large Image" onerror="this.style.display='none'">
+                  <img id="discordSmallImg" class="discord-small-img" src="" alt="Small Image" onerror="this.style.display='none'">
+                </div>
+                <div class="discord-info">
+                  <div class="discord-details" id="discordDetails">—</div>
+                  <div class="discord-state" id="discordState">—</div>
+                  <div class="discord-extra" id="discordExtra">🟢┊ONLINE 24/7</div>
+                </div>
+              </div>
+              <div class="discord-buttons" id="discordButtons">
+                <a id="discordBtn1" class="discord-btn" href="https://github.com/haidarat" target="_blank" rel="noopener">» Github «</a>
+                <a id="discordBtn2" class="discord-btn" href="https://github.com/haidarat/Stream-3.1.git" target="_blank" rel="noopener">» Stream 3.1 «</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass">
+          <div class="glass-head">
+            <h2>Service</h2>
+            <span class="tag">Info</span>
+          </div>
+          <div class="glass-body">
+            <div class="row">
+              <span class="label">Storage Mode</span>
+              <span class="value ok" id="storageMode">Central DB</span>
+            </div>
+            <div class="row">
+              <span class="label">Response</span>
+              <span class="value accent" id="latency">—</span>
+            </div>
+            <div class="row">
+              <span class="label">Update</span>
+              <span class="value accent" id="updateMode">Live</span>
+            </div>
+            <button class="btn" onclick="fetchOnce()">Refresh Now</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- SECTION 2: LIVE RPC EDITOR -->
+    <section class="editor-section" id="sectionEditor">
+      <div class="glass">
+        <div class="glass-head">
+          <h2>Live RPC Configuration Editor</h2>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <a href="https://gifyu.com/" target="_blank" rel="noopener noreferrer" class="btn-image-host" title="เปิดเว็บฝากรูป Gifyu เพื่อนำลิงก์รูปมาใส่ในบอท">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              <span>🖼️ เว็บฝากรูป (Gifyu)</span>
+            </a>
+            <span class="tag" id="authBadge" style="background: rgba(88,101,242,0.2); color:#a5b4fc;">Public View</span>
+            <span class="tag" id="dbIndicator">Database</span>
+          </div>
+        </div>
+        <div class="glass-body">
+          <div id="authNotice" class="alert warn" style="display:none; margin-bottom:16px;"></div>
+          <div id="formAlert" class="alert"></div>
+
+          <form id="rpcForm" onsubmit="handleFormSubmit(event)">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="fActivityType">Activity Type</label>
+                <select id="fActivityType" class="form-control" onchange="toggleStreamUrl()">
+                  <option value="STREAMING">STREAMING (Twitch / YouTube)</option>
+                  <option value="PLAYING">PLAYING (Game / Activity)</option>
+                  <option value="LISTENING">LISTENING (Music / Audio)</option>
+                  <option value="WATCHING">WATCHING (Video / Movie)</option>
+                  <option value="COMPETING">COMPETING (Tournament)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="fAppName">Application Name <span class="hint-tag">TEXT</span></label>
+                <input type="text" id="fAppName" class="form-control" placeholder="เช่น YouTube, Spotify" required>
+              </div>
+
+              <div class="form-group">
+                <label for="fDetails">Details (Top Line) <span class="hint-tag">TEXT</span></label>
+                <input type="text" id="fDetails" class="form-control" placeholder="เช่น ⚡ Stream 3.1 By HA!DARaT.">
+              </div>
+
+              <div class="form-group">
+                <label for="fState">State (Bottom Line) <span class="hint-tag">TEXT</span></label>
+                <input type="text" id="fState" class="form-control" placeholder="เช่น 🛡️ Follow instagram : log.horizon.r">
+              </div>
+
+              <div class="form-group full" id="streamUrlGroup">
+                <label for="fStreamUrl">Stream URL (Required for STREAMING) <span class="hint-tag url">URL</span></label>
+                <input type="url" id="fStreamUrl" class="form-control" placeholder="เช่น https://www.twitch.tv/haidar_at">
+              </div>
+
+              <div class="form-group">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <label for="fLargeImageKey">Large Image URL / Key <span class="hint-tag media">GIF / PNG / JPG</span></label>
+                  <a href="https://gifyu.com/" target="_blank" rel="noopener noreferrer" style="font-size:0.75rem; color:#818cf8; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+                    ฝากรูป Gifyu ↗
+                  </a>
+                </div>
+                <input type="text" id="fLargeImageKey" class="form-control" placeholder="เช่น https://s15.gifyu.com/images/bWVOn.gif">
+              </div>
+
+              <div class="form-group">
+                <label for="fLargeImageText">Large Image Hover Text <span class="hint-tag">TEXT</span></label>
+                <input type="text" id="fLargeImageText" class="form-control" placeholder="เช่น 🟢┊ONLINE 24/7">
+              </div>
+
+              <div class="form-group">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <label for="fSmallImageKey">Small Image URL / Key <span class="hint-tag media">PNG / JPG / GIF</span></label>
+                  <a href="https://gifyu.com/" target="_blank" rel="noopener noreferrer" style="font-size:0.75rem; color:#818cf8; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+                    ฝากรูป Gifyu ↗
+                  </a>
+                </div>
+                <input type="text" id="fSmallImageKey" class="form-control" placeholder="เช่น https://s15.gifyu.com/images/bWVOC.png">
+              </div>
+
+              <div class="form-group">
+                <label for="fSmallImageText">Small Image Hover Text <span class="hint-tag">TEXT</span></label>
+                <input type="text" id="fSmallImageText" class="form-control" placeholder="เช่น 🟢┊ONLINE 24/7">
+              </div>
+
+              <div class="form-group">
+                <label for="fButton1Text">Button 1 Text <span class="hint-tag">TEXT</span></label>
+                <input type="text" id="fButton1Text" class="form-control" placeholder="เช่น » Github «">
+              </div>
+
+              <div class="form-group">
+                <label for="fButton1Url">Button 1 URL <span class="hint-tag url">URL</span></label>
+                <input type="url" id="fButton1Url" class="form-control" placeholder="เช่น https://github.com/haidarat">
+              </div>
+
+              <div class="form-group">
+                <label for="fButton2Text">Button 2 Text <span class="hint-tag">TEXT</span></label>
+                <input type="text" id="fButton2Text" class="form-control" placeholder="เช่น » Stream 3.1 «">
+              </div>
+
+              <div class="form-group">
+                <label for="fButton2Url">Button 2 URL <span class="hint-tag url">URL</span></label>
+                <input type="url" id="fButton2Url" class="form-control" placeholder="เช่น https://github.com/haidarat/Stream-3.1.git">
+              </div>
+
+              <div class="form-group full">
+                <label class="checkbox-wrap">
+                  <input type="checkbox" id="fUseTimestamp">
+                  <span>เปิดใช้งาน Timestamp นับเวลานับตั้งแต่เปิดบอท (ELAPSED TIME)</span>
+                </label>
+              </div>
+
+              <div class="form-group full" id="passwordGroup">
+                <label for="fPassword">Dashboard Password (หากมี) <span class="hint-tag">PASSWORD</span></label>
+                <input type="password" id="fPassword" class="form-control" placeholder="ระบุรหัสผ่านเพื่อยืนยันการแก้ไข">
+              </div>
+            </div>
+
+            <div style="display:flex; gap:12px; margin-top:20px; flex-wrap:wrap;">
+              <button type="submit" class="btn btn-primary" id="btnSave" style="flex:2; min-width:240px; margin-top:0;">💾 Save & Hot-Reload Discord Presence</button>
+              <button type="button" class="btn btn-secondary" id="btnResetDefaults" onclick="openResetModal()" style="flex:1; min-width:180px; margin-top:0;">↺ ล้างเป็นค่าเริ่มต้น</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">Custom RPC · Real-time Monitor & Central Control</div>
+  </div>
+
+  <script>
+    const RING_CIRC = 326.7;
+    let es = null;
+    let uptimeBaseSec = 0;
+    let uptimeBaseAt = performance.now();
+    let lastSegHour = -1;
+    let uptimeTickTimer = null;
+    let lastRenderedSec = -1;
+    let isUserEditing = false;
+
+    // Cache of pre-resolved image asset hashes
+    const preResolvedAssetHashes = {};
+    let preResolveTimer = null;
+    let clientResolverAuth = null;
+
+    async function getClientResolverAuth() {
+      if (clientResolverAuth && clientResolverAuth.token) return clientResolverAuth;
+      try {
+        const res = await fetch('/api/asset-resolver-auth');
+        if (res.ok) {
+          clientResolverAuth = await res.json();
+          return clientResolverAuth;
+        }
+      } catch {}
+      return null;
+    }
+
+    // Direct Client-Side Discord Resolution (ใช้เน็ตบ้านผู้ใช้ยิงตรงหา Discord external-assets 100% ปลอดภัย ไม่ติด 429)
+    async function resolveDirectViaDiscord(urls = []) {
+      const auth = await getClientResolverAuth();
+      if (!auth || !auth.token || !auth.applicationId || urls.length === 0) return {};
+
+      const cleanUrls = urls.filter(u => u && u.startsWith('http') && !u.includes('cdn.discordapp.com') && !u.includes('media.discordapp.net'));
+      if (cleanUrls.length === 0) return {};
+
+      try {
+        const res = await fetch(`https://discord.com/api/v9/applications/${auth.applicationId}/external-assets`, {
+          method: 'POST',
+          headers: {
+            'Authorization': auth.token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ urls: cleanUrls }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const newlyResolved = {};
+          if (Array.isArray(data)) {
+            for (const item of data) {
+              if (item?.url && item?.external_asset_path) {
+                newlyResolved[item.url] = item.external_asset_path;
+                preResolvedAssetHashes[item.url] = item.external_asset_path;
+              }
+            }
+          }
+          // บันทึก Hash กลับไปเก็บใน MongoDB บนเซิร์ฟเวอร์
+          if (Object.keys(newlyResolved).length > 0) {
+            fetch('/api/cache-asset-hashes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ hashes: newlyResolved })
+            }).catch(() => {});
+          }
+          return newlyResolved;
+        }
+      } catch (err) {
+        console.warn('Direct client resolution notice:', err);
+      }
+      return {};
+    }
+
+    async function preResolveImageAssets() {
+      const largeUrl = (document.getElementById('fLargeImageKey')?.value || '').trim();
+      const smallUrl = (document.getElementById('fSmallImageKey')?.value || '').trim();
+      const urlsToResolve = [];
+
+      if (largeUrl && largeUrl.startsWith('http') && !preResolvedAssetHashes[largeUrl]) {
+        urlsToResolve.push(largeUrl);
+      }
+      if (smallUrl && smallUrl.startsWith('http') && !preResolvedAssetHashes[smallUrl]) {
+        urlsToResolve.push(smallUrl);
+      }
+
+      if (urlsToResolve.length === 0) return;
+
+      // 1. ตรวจสอบจากเซิร์ฟเวอร์ก่อน (เช็คแคช MongoDB/RAM)
+      try {
+        const res = await fetch('/api/resolve-assets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls: urlsToResolve })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.hashes) {
+            Object.assign(preResolvedAssetHashes, data.hashes);
+          }
+          // ถ้าเซิร์ฟเวอร์ติด Cloudflare บล็อก (เช่น Render) ให้ Browser เน็ตบ้านยิงตรงหา Discord ทันที
+          const stillNeed = urlsToResolve.filter(u => !preResolvedAssetHashes[u]);
+          if (stillNeed.length > 0) {
+            await resolveDirectViaDiscord(stillNeed);
+          }
+        }
+      } catch (err) {
+        // Fallback: ใช้เน็ตบ้านยิงตรงหา Discord
+        await resolveDirectViaDiscord(urlsToResolve);
+      }
+    }
+
+    function schedulePreResolve() {
+      if (preResolveTimer) clearTimeout(preResolveTimer);
+      preResolveTimer = setTimeout(preResolveImageAssets, 400);
+    }
+
+    function updateLivePreviewFromInputs() {
+      const actType = (document.getElementById('fActivityType').value || 'STREAMING').toUpperCase();
+      const appName = document.getElementById('fAppName').value || 'Custom RPC';
+      let titlePrefix = 'กำลังเล่น';
+      if (actType === 'STREAMING') titlePrefix = 'กำลังถ่ายทอดสด';
+      else if (actType === 'LISTENING') titlePrefix = 'กำลังฟัง';
+      else if (actType === 'WATCHING') titlePrefix = 'กำลังดู';
+      else if (actType === 'COMPETING') titlePrefix = 'กำลังแข่งขันใน';
+
+      const tagEl = document.getElementById('activityType');
+      if (tagEl) tagEl.textContent = actType;
+
+      const titleEl = document.getElementById('discordActivityTitle');
+      if (titleEl) titleEl.textContent = `${titlePrefix} ${appName}`;
+
+      const detailsVal = document.getElementById('fDetails').value;
+      const detailsEl = document.getElementById('discordDetails');
+      if (detailsEl) detailsEl.textContent = detailsVal || appName;
+
+      const stateVal = document.getElementById('fState').value;
+      const stateEl = document.getElementById('discordState');
+      if (stateEl) stateEl.textContent = stateVal || '';
+
+      const extraVal = document.getElementById('fLargeImageText').value;
+      const extraEl = document.getElementById('discordExtra');
+      if (extraEl) extraEl.textContent = extraVal || '🟢┊ONLINE 24/7';
+
+      // Large Image
+      const largeUrl = document.getElementById('fLargeImageKey').value.trim();
+      const largeImg = document.getElementById('discordLargeImg');
+      if (largeImg) {
+        if (largeUrl && (largeUrl.startsWith('http') || largeUrl.startsWith('mp:'))) {
+          largeImg.src = largeUrl;
+          largeImg.style.display = 'block';
+        } else {
+          largeImg.style.display = 'none';
+        }
+      }
+
+      // Small Image Badge
+      const smallUrl = document.getElementById('fSmallImageKey').value.trim();
+      const smallImg = document.getElementById('discordSmallImg');
+      if (smallImg) {
+        if (smallUrl && (smallUrl.startsWith('http') || smallUrl.startsWith('mp:'))) {
+          smallImg.src = smallUrl;
+          smallImg.style.display = 'block';
+        } else {
+          smallImg.style.display = 'none';
+        }
+      }
+
+      // Buttons
+      const btn1Text = document.getElementById('fButton1Text').value.trim();
+      const btn1Url = document.getElementById('fButton1Url').value.trim();
+      const btn1 = document.getElementById('discordBtn1');
+      if (btn1) {
+        if (btn1Text) {
+          btn1.textContent = btn1Text;
+          btn1.href = btn1Url || '#';
+          btn1.style.display = 'block';
+        } else {
+          btn1.style.display = 'none';
+        }
+      }
+
+      const btn2Text = document.getElementById('fButton2Text').value.trim();
+      const btn2Url = document.getElementById('fButton2Url').value.trim();
+      const btn2 = document.getElementById('discordBtn2');
+      if (btn2) {
+        if (btn2Text) {
+          btn2.textContent = btn2Text;
+          btn2.href = btn2Url || '#';
+          btn2.style.display = 'block';
+        } else {
+          btn2.style.display = 'none';
+        }
+      }
+    }
+
+    function bindLivePreviewEvents() {
+      const form = document.getElementById('rpcForm');
+      if (!form) return;
+      form.addEventListener('input', () => {
+        isUserEditing = true;
+        updateLivePreviewFromInputs();
+        schedulePreResolve();
+      });
+      form.addEventListener('change', () => {
+        isUserEditing = true;
+        updateLivePreviewFromInputs();
+        schedulePreResolve();
+      });
+
+      const fLarge = document.getElementById('fLargeImageKey');
+      if (fLarge) {
+        fLarge.addEventListener('blur', preResolveImageAssets);
+      }
+      const fSmall = document.getElementById('fSmallImageKey');
+      if (fSmall) {
+        fSmall.addEventListener('blur', preResolveImageAssets);
+      }
+    }
+
+    function switchTab(tab) {
+      if (tab === 'editor') {
+        const editor = document.getElementById('sectionEditor');
+        editor.scrollIntoView({ behavior: 'smooth' });
+        loadEditorConfig();
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+
+    function toggleStreamUrl() {
+      const type = document.getElementById('fActivityType').value;
+      const group = document.getElementById('streamUrlGroup');
+      group.style.display = type === 'STREAMING' ? 'flex' : 'none';
+    }
+
+    async function checkAuthStatus() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) return;
+        const data = await res.json();
+        const loginOverlay = document.getElementById('loginGateOverlay');
+        const loginBtn = document.getElementById('btnLoginDiscord');
+        const authProfile = document.getElementById('authProfile');
+        const userAvatar = document.getElementById('userAvatar');
+        const userName = document.getElementById('userName');
+        const authBadge = document.getElementById('authBadge');
+        const authNotice = document.getElementById('authNotice');
+        const btnSave = document.getElementById('btnSave');
+
+        if (data.authenticated && data.user) {
+          if (loginOverlay) loginOverlay.style.display = 'none';
+          loginBtn.style.display = 'none';
+          authProfile.style.display = 'inline-flex';
+          userAvatar.src = data.user.avatar || '';
+          userName.textContent = data.user.global_name || data.user.username;
+          if (authBadge) {
+            authBadge.textContent = data.isOwner ? '👑 Owner' : '👤 User';
+            authBadge.style.color = data.isOwner ? '#fbbf24' : '#a5b4fc';
+          }
+        } else if (data.oauthConfigured) {
+          // บังคับแสดง Modal Login ทันทีเมื่อเปิดหน้าเว็บถ้ายังไม่ได้เข้าสู่ระบบ
+          if (loginOverlay) loginOverlay.style.display = 'flex';
+          loginBtn.style.display = 'inline-flex';
+          authProfile.style.display = 'none';
+          if (authBadge) {
+            authBadge.textContent = data.isCentralHub ? 'Central Hub' : 'Connected to Central Hub';
+            authBadge.style.color = '#94a3b8';
+          }
+        } else {
+          if (loginOverlay) loginOverlay.style.display = 'none';
+          loginBtn.style.display = 'none';
+          authProfile.style.display = 'none';
+          if (authBadge) authBadge.textContent = 'Standalone';
+        }
+      } catch (err) {
+        console.warn('Auth check error:', err);
+      }
+    }
+
+    async function loadEditorConfig() {
+      try {
+        const res = await fetch('/api/config');
+        if (!res.ok) return;
+        const data = await res.json();
+        const c = data.config || {};
+
+        document.getElementById('fActivityType').value = (c.activityType || 'STREAMING').toUpperCase();
+        document.getElementById('fAppName').value = c.applicationName || '';
+        document.getElementById('fDetails').value = c.details || '';
+        document.getElementById('fState').value = c.state || '';
+        document.getElementById('fStreamUrl').value = c.streamUrl || '';
+        document.getElementById('fLargeImageKey').value = c.largeImageKey || '';
+        document.getElementById('fLargeImageText').value = c.largeImageText || '';
+        document.getElementById('fSmallImageKey').value = c.smallImageKey || '';
+        document.getElementById('fSmallImageText').value = c.smallImageText || '';
+        document.getElementById('fButton1Text').value = c.button1Text || '';
+        document.getElementById('fButton1Url').value = c.button1Url || '';
+        document.getElementById('fButton2Text').value = c.button2Text || '';
+        document.getElementById('fButton2Url').value = c.button2Url || '';
+        document.getElementById('fUseTimestamp').checked = c.useTimestamp !== false;
+
+        document.getElementById('dbIndicator').textContent = data.storage === 'database' ? 'MongoDB Atlas' : (data.storage === 'central-api' ? 'Central Hub' : 'In-Memory');
+
+        // Check Owner and Permission status
+        const authNotice = document.getElementById('authNotice');
+        const btnSave = document.getElementById('btnSave');
+        const passGroup = document.getElementById('passwordGroup');
+
+        if (data.oauthConfigured) {
+          passGroup.style.display = 'none'; // Password replaced by Discord OAuth
+          if (!data.user) {
+            authNotice.className = 'alert warn';
+            authNotice.innerHTML = '🔒 <strong>ระบบเปิดโหมดความปลอดภัย:</strong> กรุณากด <a href="/api/auth/discord/login" style="color:#818cf8; text-decoration:underline;">Login with Discord</a> ด้านบนก่อนแก้ไขข้อมูล';
+            authNotice.style.display = 'block';
+            btnSave.disabled = true;
+          } else if (data.ownerConfigured && !data.isOwner) {
+            authNotice.className = 'alert error';
+            authNotice.innerHTML = `⛔ <strong>ไม่มีสิทธิ์แก้ไข:</strong> เข้าสู่ระบบในชื่อ <strong>${data.user.username}</strong> แต่ระบบนี้สงวนสิทธิ์เฉพาะเจ้าของเท่านั้น (Owner Only)`;
+            authNotice.style.display = 'block';
+            btnSave.disabled = true;
+          } else {
+            authNotice.style.display = 'none';
+            btnSave.disabled = false;
+          }
+        } else {
+          passGroup.style.display = data.hasPassword ? 'block' : 'none';
+          authNotice.style.display = 'none';
+          btnSave.disabled = false;
+        }
+
+        toggleStreamUrl();
+        updateLivePreviewFromInputs();
+      } catch (err) {
+        console.error('Failed to load config:', err);
+      }
+    }
+
+    function openResetModal() {
+      const modal = document.getElementById('resetConfirmModal');
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closeResetModal() {
+      const modal = document.getElementById('resetConfirmModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function executeResetDefaults() {
+      const btnReset = document.getElementById('btnConfirmReset');
+      if (btnReset) {
+        btnReset.disabled = true;
+        btnReset.textContent = '⏳ กำลังรีเซ็ต...';
+      }
+
+      // Default Configuration Matching Specification
+      const defaults = {
+        activityType: 'STREAMING',
+        applicationName: 'YouTube',
+        details: '⚡ Stream 3.1 By HA!DARaT.',
+        state: '🛡️ Follow instagram : log.horizon.r',
+        streamUrl: 'https://www.twitch.tv/haidar_at',
+        largeImageKey: 'https://s15.gifyu.com/images/bWVOn.gif',
+        largeImageText: '🟢┊ONLINE 24/7',
+        smallImageKey: 'https://s15.gifyu.com/images/bWVOC.png',
+        smallImageText: '🟢┊ONLINE 24/7',
+        button1Text: '» Github «',
+        button1Url: 'https://github.com/haidarat',
+        button2Text: '» Stream 3.1 «',
+        button2Url: 'https://github.com/haidarat/Stream-3.1.git',
+        useTimestamp: false
+      };
+
+      // Populate Form Fields
+      document.getElementById('fActivityType').value = defaults.activityType;
+      document.getElementById('fAppName').value = defaults.applicationName;
+      document.getElementById('fDetails').value = defaults.details;
+      document.getElementById('fState').value = defaults.state;
+      document.getElementById('fStreamUrl').value = defaults.streamUrl;
+      document.getElementById('fLargeImageKey').value = defaults.largeImageKey;
+      document.getElementById('fLargeImageText').value = defaults.largeImageText;
+      document.getElementById('fSmallImageKey').value = defaults.smallImageKey;
+      document.getElementById('fSmallImageText').value = defaults.smallImageText;
+      document.getElementById('fButton1Text').value = defaults.button1Text;
+      document.getElementById('fButton1Url').value = defaults.button1Url;
+      document.getElementById('fButton2Text').value = defaults.button2Text;
+      document.getElementById('fButton2Url').value = defaults.button2Url;
+      document.getElementById('fUseTimestamp').checked = defaults.useTimestamp;
+
+      toggleStreamUrl();
+      updateLivePreviewFromInputs();
+      closeResetModal();
+
+      if (btnReset) {
+        btnReset.disabled = false;
+        btnReset.textContent = 'ยืนยันรีเซ็ต';
+      }
+
+      // Auto-submit form to save to Database and update Discord Presence
+      const form = document.getElementById('rpcForm');
+      if (form) {
+        form.dispatchEvent(new Event('submit', { cancelable: true }));
+      }
+    }
+
+    async function handleFormSubmit(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btnSave');
+      const alertBox = document.getElementById('formAlert');
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลังบันทึกและ Hot-Reload...';
+      alertBox.className = 'alert';
+      alertBox.style.display = 'none';
+
+      const payload = {
+        config: {
+          activityType: document.getElementById('fActivityType').value,
+          applicationName: document.getElementById('fAppName').value,
+          details: document.getElementById('fDetails').value,
+          state: document.getElementById('fState').value,
+          streamUrl: document.getElementById('fStreamUrl').value,
+          largeImageKey: document.getElementById('fLargeImageKey').value,
+          largeImageText: document.getElementById('fLargeImageText').value,
+          smallImageKey: document.getElementById('fSmallImageKey').value,
+          smallImageText: document.getElementById('fSmallImageText').value,
+          button1Text: document.getElementById('fButton1Text').value,
+          button1Url: document.getElementById('fButton1Url').value,
+          button2Text: document.getElementById('fButton2Text').value,
+          button2Url: document.getElementById('fButton2Url').value,
+          useTimestamp: document.getElementById('fUseTimestamp').checked,
+        },
+        password: document.getElementById('fPassword').value,
+      };
+
+      // Fast Asset Resolution: ใช้ค่าที่ Pre-resolve ไว้แล้วล่วงหน้าทันที (0ms wait)
+      const lKey = payload.config.largeImageKey;
+      const sKey = payload.config.smallImageKey;
+
+      if (lKey && preResolvedAssetHashes[lKey]) {
+        payload.config.largeImageAssetHash = preResolvedAssetHashes[lKey];
+      }
+      if (sKey && preResolvedAssetHashes[sKey]) {
+        payload.config.smallImageAssetHash = preResolvedAssetHashes[sKey];
+      }
+
+      // ถ้ายังไม่มีในแคชหน้าเว็บ ให้ลองดึงจาก Server หรือให้ Browser แปลงตรง
+      const needResolve = [];
+      if (lKey && lKey.startsWith('http') && !payload.config.largeImageAssetHash) needResolve.push(lKey);
+      if (sKey && sKey.startsWith('http') && !payload.config.smallImageAssetHash) needResolve.push(sKey);
+
+      if (needResolve.length > 0) {
+        try {
+          const resHash = await fetch('/api/resolve-assets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ urls: needResolve })
+          });
+          if (resHash.ok) {
+            const dataHash = await resHash.json();
+            if (dataHash && dataHash.hashes) {
+              Object.assign(preResolvedAssetHashes, dataHash.hashes);
+            }
+          }
+        } catch (e) {
+          console.warn('Asset resolution notice:', e);
+        }
+
+        // หาก Server ยังไม่มีในแคช (เช่น เซิร์ฟเวอร์ Render โดนบล็อก) ให้ Browser แปลงตรงหา Discord ทันที
+        const unhashed = needResolve.filter(u => !preResolvedAssetHashes[u]);
+        if (unhashed.length > 0) {
+          await resolveDirectViaDiscord(unhashed);
+        }
+
+        if (preResolvedAssetHashes[lKey]) payload.config.largeImageAssetHash = preResolvedAssetHashes[lKey];
+        if (preResolvedAssetHashes[sKey]) payload.config.smallImageAssetHash = preResolvedAssetHashes[sKey];
+      }
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          isUserEditing = false;
+          alertBox.className = 'alert success';
+          alertBox.textContent = '✅ ' + (data.message || 'บันทึกสำเร็จและอัปเดตขึ้น Discord เรียบร้อยแล้ว!');
+          alertBox.style.display = 'block';
+        } else {
+          alertBox.className = 'alert error';
+          alertBox.textContent = '❌ ' + (data.error || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+          alertBox.style.display = 'block';
+        }
+      } catch (err) {
+        alertBox.className = 'alert error';
+        alertBox.textContent = '❌ การเชื่อมต่อล้มเหลว: ' + err.message;
+        alertBox.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '💾 Save & Hot-Reload Discord Presence';
+      }
+    }
+
+    function getCurrentUptimeSec() {
+      return uptimeBaseSec + Math.floor((performance.now() - uptimeBaseAt) / 1000);
+    }
+
+    function formatUptime(sec) {
+      sec = Math.max(0, sec | 0);
+      const hh = ((sec / 3600) | 0).toString().padStart(2, '0');
+      const mm = (((sec % 3600) / 60) | 0).toString().padStart(2, '0');
+      const ss = (sec % 60).toString().padStart(2, '0');
+      return `${hh}:${mm}:${ss}`;
+    }
+
+    function syncUptime(sec) {
+      const serverSec = Number(sec);
+      if (!Number.isFinite(serverSec)) return;
+
+      const currentSec = getCurrentUptimeSec();
+      const nextSec = Math.max(serverSec, currentSec);
+      uptimeBaseSec = nextSec;
+      uptimeBaseAt = performance.now();
+      renderUptime();
+    }
+
+    function renderUptime() {
+      const sec = getCurrentUptimeSec();
+      if (sec !== lastRenderedSec) {
+        document.getElementById('uptime').textContent = formatUptime(sec);
+        lastRenderedSec = sec;
+      }
+
+      const hour = Math.floor(sec / 3600);
+      if (hour !== lastSegHour) {
+        lastSegHour = hour;
+        buildSegments(sec);
+      }
+    }
+
+    function startUptimeTick() {
+      if (uptimeTickTimer) clearInterval(uptimeTickTimer);
+      uptimeTickTimer = setInterval(renderUptime, 250);
+      renderUptime();
+    }
+
+    function setClass(el, cls) {
+      el.className = 'value ' + cls;
+    }
+
+    function setRing(pct) {
+      const ring = document.getElementById('healthRing');
+      const offset = RING_CIRC - (RING_CIRC * Math.min(100, Math.max(0, pct))) / 100;
+      ring.style.strokeDashoffset = offset;
+    }
+
+    function buildSegments(uptimeSec) {
+      const segs = document.getElementById('uptimeSegs');
+      segs.innerHTML = '';
+      const filled = Math.min(10, Math.floor(uptimeSec / 3600));
+      for (let i = 0; i < 10; i++) {
+        const d = document.createElement('div');
+        d.className = 'seg' + (i < filled ? ' on' : '');
+        segs.appendChild(d);
+      }
+    }
+
+    function updateUI(data) {
+      const ms = data.ts ? Math.max(0, Date.now() - data.ts) : 0;
+
+      document.getElementById('liveIndicator').className = 'status-pill' + (data.ok ? '' : ' off');
+      document.getElementById('liveText').textContent = data.ok ? 'Online' : 'Degraded';
+
+      const discordEl = document.getElementById('discordStatus');
+      discordEl.textContent = data.discord === 'connected' ? 'Connected' : (data.loginStage || 'Connecting...');
+      setClass(discordEl, data.discord === 'connected' ? 'ok' : 'warn');
+
+      const gatewayEl = document.getElementById('gatewayStage');
+      if (gatewayEl) {
+        gatewayEl.textContent = data.loginStage || (data.discord === 'connected' ? 'Connected' : 'Connecting');
+        setClass(gatewayEl, data.discord === 'connected' ? 'ok' : (data.loginStage === 'Auth Error' ? 'warn' : 'accent'));
+      }
+
+      const rpcEl = document.getElementById('rpcStatus');
+      rpcEl.textContent = data.rpc === 'active' ? 'Active' : 'Pending';
+      setClass(rpcEl, data.rpc === 'active' ? 'ok' : 'warn');
+
+      syncUptime(data.uptimeSec);
+      document.getElementById('sysLoad').textContent = data.memPct + '%';
+      document.getElementById('ramLabel').textContent = data.memoryUsedLabel || '—';
+      document.getElementById('ramBar').style.width = Math.min(100, Math.max(0, data.memPct || 0)) + '%';
+      document.getElementById('cpuName').textContent = data.cpuModel ? data.cpuModel : 'CPU';
+      document.getElementById('cpuLabel').textContent = data.cpuLabel || '—';
+      document.getElementById('cpuBar').style.width = Math.min(100, Math.max(0, data.cpuPct || 0)) + '%';
+      document.getElementById('sysStatus').textContent = data.ok ? 'Healthy' : 'Recovering';
+      document.getElementById('latency').textContent = ms + ' ms';
+      document.getElementById('healthPct').textContent = data.healthPct + '%';
+      setRing(data.healthPct);
+      document.getElementById('memBar').style.width = data.memPct + '%';
+      document.getElementById('memLabel').textContent = data.memPct + '%';
+
+      document.getElementById('activityType').textContent = data.activityType || '—';
+
+      // Update Discord Live Presence Card (Mockup matches Discord Client exactly)
+      if (!isUserEditing) {
+        const actType = (data.activityType || 'STREAMING').toUpperCase();
+        const appName = data.applicationName || 'Custom RPC';
+        let titlePrefix = 'กำลังเล่น';
+        if (actType === 'STREAMING') titlePrefix = 'กำลังถ่ายทอดสด';
+        else if (actType === 'LISTENING') titlePrefix = 'กำลังฟัง';
+        else if (actType === 'WATCHING') titlePrefix = 'กำลังดู';
+        else if (actType === 'COMPETING') titlePrefix = 'กำลังแข่งขันใน';
+
+        const titleEl = document.getElementById('discordActivityTitle');
+        if (titleEl) titleEl.textContent = `${titlePrefix} ${appName}`;
+
+        const detailsEl = document.getElementById('discordDetails');
+        if (detailsEl) detailsEl.textContent = data.details || appName;
+
+        const stateEl = document.getElementById('discordState');
+        if (stateEl) stateEl.textContent = data.state || '';
+
+        const extraEl = document.getElementById('discordExtra');
+        if (extraEl) extraEl.textContent = data.largeImageText || (data.ok ? '🟢┊ONLINE 24/7' : '');
+
+        const largeImg = document.getElementById('discordLargeImg');
+        if (largeImg) {
+          if (data.largeImageKey && (data.largeImageKey.startsWith('http') || data.largeImageKey.startsWith('mp:'))) {
+            largeImg.src = data.largeImageKey;
+            largeImg.style.display = 'block';
+          } else {
+            largeImg.style.display = 'none';
+          }
+        }
+
+        const smallImg = document.getElementById('discordSmallImg');
+        if (smallImg) {
+          if (data.smallImageKey && (data.smallImageKey.startsWith('http') || data.smallImageKey.startsWith('mp:'))) {
+            smallImg.src = data.smallImageKey;
+            smallImg.style.display = 'block';
+          } else {
+            smallImg.style.display = 'none';
+          }
+        }
+
+        const btn1 = document.getElementById('discordBtn1');
+        if (btn1) {
+          if (data.button1Text && data.button1Url) {
+            btn1.textContent = data.button1Text;
+            btn1.href = data.button1Url;
+            btn1.style.display = 'block';
+          } else {
+            btn1.style.display = 'none';
+          }
+        }
+
+        const btn2 = document.getElementById('discordBtn2');
+        if (btn2) {
+          if (data.button2Text && data.button2Url) {
+            btn2.textContent = data.button2Text;
+            btn2.href = data.button2Url;
+            btn2.style.display = 'block';
+          } else {
+            btn2.style.display = 'none';
+          }
+        }
+      }
+
+      const storageEl = document.getElementById('storageMode');
+      if (storageEl && data.database) {
+        storageEl.textContent = data.isCentralHub ? 'Central Hub (DB)' : (data.database.connected ? 'MongoDB' : 'Central API');
+      }
+    }
+
+    function setOffline() {
+      document.getElementById('liveIndicator').className = 'status-pill off';
+      document.getElementById('liveText').textContent = 'Offline';
+      document.getElementById('updateMode').textContent = 'Reconnecting';
+      document.getElementById('healthPct').textContent = '0%';
+      setRing(0);
+    }
+
+    function connectStream() {
+      if (es) es.close();
+      es = new EventSource('/api/stream');
+
+      es.onopen = () => {
+        document.getElementById('updateMode').textContent = 'Live';
+      };
+
+      es.onmessage = (e) => {
+        try {
+          updateUI(JSON.parse(e.data));
+        } catch {}
+      };
+
+      es.onerror = () => {
+        es.close();
+        setOffline();
+        setTimeout(connectStream, 5000);
+      };
+    }
+
+    async function fetchOnce() {
+      try {
+        const res = await fetch('/api/status');
+        if (res.status === 429) {
+          document.getElementById('liveText').textContent = 'Rate Limited';
+          return;
+        }
+        updateUI(await res.json());
+      } catch {
+        setOffline();
+      }
+    }
+
+    function createSnow() {
+      const layer = document.getElementById('snowLayer');
+      if (!layer) return;
+      const count = 40;
+      for (let i = 0; i < count; i++) {
+        const flake = document.createElement('span');
+        flake.className = 'snow-flake';
+        const size = 1.2 + Math.random() * 2.2;
+        flake.style.width = size + 'px';
+        flake.style.height = size + 'px';
+        flake.style.left = Math.random() * 100 + 'vw';
+        flake.style.setProperty('--drift', (Math.random() * 120 - 60) + 'px');
+        flake.style.animationDuration = (8 + Math.random() * 7) + 's';
+        flake.style.animationDelay = Math.random() * 6 + 's';
+        flake.style.opacity = (0.35 + Math.random() * 0.65).toFixed(2);
+        layer.appendChild(flake);
+      }
+    }
+
+    connectStream();
+    startUptimeTick();
+    createSnow();
+    checkAuthStatus();
+    bindLivePreviewEvents();
+    loadEditorConfig();
+  </script>
+</body>
+</html>

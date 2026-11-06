@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: custom-rpc
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /ping
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: TOKEN
+        sync: false
+      - key: APPLICATION_ID
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: OWNER_DISCORD_ID
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: CENTRAL_API_URL
+        sync: false
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      - key: LOGIN_RETRY_DELAY_MS
+        value: "4000"
+      - key: DEBUG_LOGS
+        value: "false"
